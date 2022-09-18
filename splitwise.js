@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Splitwise Autofill
 // @namespace    com.iamkroot
-// @version      0.1
+// @version      0.2
 // @description  Autofill "unequal split" for an expense.
 // @author       iamkroot
 // @match        https://secure.splitwise.com/
@@ -40,7 +40,6 @@
         let maxName, maxScore = -1, maxAmt;
         for (const [name, amt] of Object.entries(data)) {
             const score = string_similarity(tgtName, name);
-            console.debug(tgtName, name, amt, score);
             if (score > maxScore) {
                 maxName = name;
                 maxAmt = amt;
@@ -54,7 +53,29 @@
         }
     }
 
-    function autofill(data) {
+    const REM_WARN_ID = "xx-remainwarn";
+
+    function getWarnSpan() {
+        let el = document.getElementById(REM_WARN_ID);
+        if(el !== null) { return el; }
+        let splitDiv = document.getElementsByClassName("split_method unequal")[0];
+        let button = splitDiv.getElementsByTagName("button")[0];
+        el = document.createElement("span");
+        el.id = REM_WARN_ID;
+        button.insertAdjacentElement("afterend", el);
+        return el;
+    }
+
+    function addWarning(remaining) {
+        let warnSpan = getWarnSpan();
+        const rem = Object.entries(remaining).map(([n,amt]) => `${n}(${amt})`).join(", ");
+        const msg = "Remaining people- " + rem;
+        warnSpan.textContent = msg;
+        console.warn(msg);
+    }
+
+    function autofill(origData) {
+        let data = structuredClone(origData);
         let splitDiv = document.getElementsByClassName("split_method unequal")[0];
         let people = splitDiv.getElementsByClassName("person");
         for (let personDiv of people) {
@@ -65,9 +86,13 @@
                 amtField.value = "";
                 personDiv.title = "No match!! score=" + score;
             } else {
+                delete data[dataName];
                 personDiv.title = dataName;
                 amtField.value = amt;
             }
+        }
+        if (Object.keys(data).length > 0) {
+            addWarning(data);
         }
     }
 
@@ -111,7 +136,7 @@
                         console.log("Opened split view");
                         createTextArea();
                     } else {
-                        console.warn("close choose_split", mutation.target);
+                        console.debug("close choose_split", mutation.target);
                         // TODO: Remove the text area.
                     }
                 }
@@ -129,7 +154,7 @@
                         choose_split_observer.observe(chooseSplitDiv, {attributeFilter: ["class"]});
                     } else {
                         choose_split_observer.disconnect();
-                        console.warn("close add_bill", mutation.target);
+                        console.debug("close add_bill", mutation.target);
                     }
                 }
             }
