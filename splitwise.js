@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Splitwise Autofill
 // @namespace    com.iamkroot
-// @version      0.2
+// @version      0.3
 // @description  Autofill "unequal split" for an expense.
 // @author       iamkroot
 // @match        https://secure.splitwise.com/
@@ -33,8 +33,6 @@
         }
         return 0.0
     }
-
-    let data = {"Aniket": "111.11", "Abhinav": "111.21"};
 
     function findMatch(tgtName, data, threshold=0.4) {
         let maxName, maxScore = -1, maxAmt;
