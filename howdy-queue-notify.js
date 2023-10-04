@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Notify for Howdy Queue
 // @namespace    iamkroot
-// @version      0.1
+// @version      0.2
 // @description  Send a notification whenever a new student joins the queue
-// @author       You
+// @author       iamkroot
 // @match        https://queue.cs128.org/rooms/*/staff
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=cs128.org
 // @grant        GM_notification
@@ -33,6 +33,26 @@
             });
         });
     }
+    const infoFromRow = (tr) => ({
+        studentName: tr.cells[0].textContent,
+        desc: tr.cells[3].textContent,
+        status: tr.cells[5].firstChild.tagName === "SPAN" ? "helping" : "unhelped",
+    });
+    const checkStaleUnhelped = (tbody, info) => {
+        for (let tr of tbody.rows) {
+            const ri = infoFromRow(tr);
+            if (info.studentName == ri.studentName && info.desc == ri.desc && ri.status == "unhelped") {
+                GM_notification({
+                    text: info.desc,
+                    title: "Howdy Queue - UNHELPED STUDENT " + info.studentName,
+                    silent: false,
+                    // switch to this tab when clicked
+                    onclick: () => window.focus(),
+                });
+                break;
+            }
+        }
+    };
     // our main code start here
     // first, wait for table element to get loaded
     waitForElm("table").then((table) => {
@@ -43,17 +63,19 @@
                 if (event.addedNodes.length != 0) {
                     for (let tr of event.addedNodes) {
                         if (tr.tagName != 'TR') continue;
-                        const name = tr.cells[0].textContent;
-                        const title = "Howdy Queue - New user " + name;
-                        const text = tr.cells[3].textContent;
+                        const info = infoFromRow(tr);
+                        if (info.status === "helping") continue;
+                        const title = "Howdy Queue - New user " + info.studentName;
                         GM_notification({
-                            text,
+                            text: info.desc,
                             title,
                             silent: false,
                             // switch to this tab when clicked
                             onclick: () => window.focus(),
                         });
 
+                        const ONE_MINUTE_IN_MS = 60 * 1000;
+                        setTimeout(() => checkStaleUnhelped(tbody, info), ONE_MINUTE_IN_MS);
                     }
                     // not extracting any user info, just send a notif
 
