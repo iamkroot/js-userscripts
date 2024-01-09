@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Notify for Howdy Queue
 // @namespace    iamkroot
-// @version      0.2
+// @version      0.2.1
 // @description  Send a notification whenever a new student joins the queue
 // @author       iamkroot
 // @match        https://queue.cs128.org/rooms/*/staff
@@ -38,16 +38,19 @@
         desc: tr.cells[3].textContent,
         status: tr.cells[5].firstChild.tagName === "SPAN" ? "helping" : "unhelped",
     });
+
+    const STALE_TIMEOUT_MS = 60 * 1000; // 60sec
     const checkStaleUnhelped = (tbody, info) => {
         for (let tr of tbody.rows) {
             const ri = infoFromRow(tr);
             if (info.studentName == ri.studentName && info.desc == ri.desc && ri.status == "unhelped") {
+                const timeoutH = setTimeout(() => checkStaleUnhelped(tbody, info), STALE_TIMEOUT_MS)
                 GM_notification({
                     text: info.desc,
                     title: "Howdy Queue - UNHELPED STUDENT " + info.studentName,
                     silent: false,
-                    // switch to this tab when clicked
-                    onclick: () => window.focus(),
+                    // ignore student for another minute
+                    onclick: () => clearTimeout(timeoutH),
                 });
                 break;
             }
@@ -74,8 +77,7 @@
                             onclick: () => window.focus(),
                         });
 
-                        const ONE_MINUTE_IN_MS = 60 * 1000;
-                        setTimeout(() => checkStaleUnhelped(tbody, info), ONE_MINUTE_IN_MS);
+                        setTimeout(() => checkStaleUnhelped(tbody, info), STALE_TIMEOUT_MS);
                     }
                     // not extracting any user info, just send a notif
 
