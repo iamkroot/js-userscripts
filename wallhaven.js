@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wallhaven Enhanced
 // @namespace    iamkroot
-// @version      0.2
+// @version      0.3
 // @description  Download and Fav the wallpaper; Press F to toggle Fullscreen
 // @author       iamkroot
 // @match        https://wallhaven.cc/w/*
@@ -16,9 +16,7 @@
         let elem = document.getElementById("wallpaper");
 
         if (!document.fullscreenElement) {
-            elem.requestFullscreen().catch((err) => {
-                alert(`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`);
-            });
+            document.getElementsByClassName("showcase-fullscreen-toggle")[0].click();
         } else {
             document.exitFullscreen();
         }
@@ -63,7 +61,7 @@
         addToFav();
     }
 
-    document.addEventListener('keydown', (event) => {
+    document.addEventListener('keyup', (event) => {
         switch (event.key) {
             case 'a': addToFav(); break;
             case 'd': downloadAndFav(); break;
