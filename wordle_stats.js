@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Wordle Stats
 // @namespace    iamkroot
-// @version      0.2
-// @description  Bring back stats view
+// @version      0.3
+// @description  Bring back stats for anon view
 // @author       iamkroot
 // @match        https://www.nytimes.com/games/wordle/index.html
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=nytimes.com
