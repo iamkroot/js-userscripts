@@ -1,41 +1,44 @@
 // ==UserScript==
 // @name         Wordle Stats
 // @namespace    iamkroot
-// @version      0.3
-// @description  Bring back stats for anon view
+// @version      2024-12-31
+// @description  Bring back stats view
 // @author       iamkroot
 // @match        https://www.nytimes.com/games/wordle/index.html
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=nytimes.com
 // @grant        unsafeWindow
+// @grant        GM_setValue
+// @grant        GM_getValue
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // taken from https://stackoverflow.com/questions/5525071/how-to-wait-until-an-element-exists
-    function waitForElm(selector) {
-        return new Promise(resolve => {
-            if (document.querySelector(selector)) {
-                return resolve(document.querySelector(selector));
-            }
-
-            const observer = new MutationObserver(mutations => {
-                if (document.querySelector(selector)) {
-                    resolve(document.querySelector(selector));
-                    observer.disconnect();
+    // called whenever the element is added
+    function onElmAdded(selector, callback) {
+        const observer = new MutationObserver(mutations => {
+            for (let mutation of mutations) {
+                for (let elm of mutation.addedNodes) {
+                    if (elm.matches !== undefined && elm.matches(selector)) {
+                        callback(elm);
+                    }
                 }
-            });
+            }
+        });
 
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
         });
     }
-    waitForElm("#regiwallModal-dialog").then(dialogbox=> {
+    onElmAdded("#regiwall-dialog", dialogbox => {
+        let toReplace = dialogbox.querySelector("h1[class^=Header-module_regiwallText]");
+        if (!toReplace) {
+            console.error("Couldn't find a target to replace. They changed the element classes :(");
+            return;
+        }
         let insertDiv = `<div class="Stats-module_statsContainer__g23s0"><h2 class="Stats-module_statisticsHeading__CExdL">Statistics</h2><ul class="Stats-module_statistics__oFLEK"><li class="Stats-module_statisticContainer__woJli"><span class="visually-hidden">Number of games played, 1</span><div class="Stats-module_statistic__u5db0" aria-hidden="true">1</div><div class="Stats-module_label__sQwFu" aria-hidden="true">Played</div></li><li class="Stats-module_statisticContainer__woJli"><span class="visually-hidden">Win percentage, 0</span><div class="Stats-module_statistic__u5db0" aria-hidden="true">0</div><div class="Stats-module_label__sQwFu" aria-hidden="true">Win %</div></li><li class="Stats-module_statisticContainer__woJli"><span class="visually-hidden">Current Streak count, 0</span><div class="Stats-module_statistic__u5db0" aria-hidden="true">0</div><div class="Stats-module_label__sQwFu" aria-hidden="true">Current Streak</div></li><li class="Stats-module_statisticContainer__woJli"><span class="visually-hidden">Max Streak count, 0</span><div class="Stats-module_statistic__u5db0" aria-hidden="true">0</div><div class="Stats-module_label__sQwFu" aria-hidden="true">Max Streak</div></li></ul><div class="Stats-module_statsBtnLeft__IyDkc"><h2 class="Stats-module_guessDistributionCopy__ydhXT">Guess Distribution</h2></div><div class="Stats-module_guessDistribution__ibfJS"><div class="Stats-module_graphContainer__Al4D1" role="img" aria-label="0 solved in 1st attempt"><div class="Stats-module_guess__Fc0Xn" aria-hidden="true">1</div><div class="Stats-module_graph__f4tUv" aria-hidden="true"><div style="width: 7%;" class="Stats-module_graphBar__HvdG8"><div class="Stats-module_numGuesses__jFa2m">0</div></div></div></div><div class="Stats-module_graphContainer__Al4D1" role="img" aria-label="0 solved in 2nd attempt"><div class="Stats-module_guess__Fc0Xn" aria-hidden="true">2</div><div class="Stats-module_graph__f4tUv" aria-hidden="true"><div style="width: 7%;" class="Stats-module_graphBar__HvdG8"><div class="Stats-module_numGuesses__jFa2m">0</div></div></div></div><div class="Stats-module_graphContainer__Al4D1" role="img" aria-label="0 solved in 3rd attempt"><div class="Stats-module_guess__Fc0Xn" aria-hidden="true">3</div><div class="Stats-module_graph__f4tUv" aria-hidden="true"><div style="width: 7%;" class="Stats-module_graphBar__HvdG8"><div class="Stats-module_numGuesses__jFa2m">0</div></div></div></div><div class="Stats-module_graphContainer__Al4D1" role="img" aria-label="0 solved in 4th attempt"><div class="Stats-module_guess__Fc0Xn" aria-hidden="true">4</div><div class="Stats-module_graph__f4tUv" aria-hidden="true"><div style="width: 7%;" class="Stats-module_graphBar__HvdG8"><div class="Stats-module_numGuesses__jFa2m">0</div></div></div></div><div class="Stats-module_graphContainer__Al4D1" role="img" aria-label="0 solved in 5th attempt"><div class="Stats-module_guess__Fc0Xn" aria-hidden="true">5</div><div class="Stats-module_graph__f4tUv" aria-hidden="true"><div style="width: 7%;" class="Stats-module_graphBar__HvdG8"><div class="Stats-module_numGuesses__jFa2m">0</div></div></div></div><div class="Stats-module_graphContainer__Al4D1" role="img" aria-label="0 solved in 6th attempt"><div class="Stats-module_guess__Fc0Xn" aria-hidden="true">6</div><div class="Stats-module_graph__f4tUv" aria-hidden="true"><div style="width: 7%;" class="Stats-module_graphBar__HvdG8"><div class="Stats-module_numGuesses__jFa2m">0</div></div></div></div></div></div>`;
-        let toReplace = dialogbox.querySelector("h1[class^=Header-module_regiwallText]").parentElement;
-        toReplace.outerHTML = insertDiv;
+        toReplace.parentElement.outerHTML = insertDiv;
         let mainDiv = dialogbox.querySelector("div[class^=Stats-module_statsContainer]");
         let topbar = mainDiv.children[1];
         if (topbar.childElementCount != 4) return;
