@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wordle Stats
 // @namespace    iamkroot
-// @version      2024-12-31
+// @version      2025-02-18
 // @description  Bring back stats view
 // @author       iamkroot
 // @match        https://www.nytimes.com/games/wordle/index.html
@@ -50,13 +50,23 @@
         let stats = window.localStorage.getItem("wordle-legacy-stats-ANON");
         if (!stats) {
             console.error("Could not get stats!!");
-            console.log("Here's the last saved copy:", GM_getValue("wordleStats"));
+            console.log("Here's the saved copies:", GM_getValue("wordleStats"));
             return;
         }
-        // backup in case NYTimes ever decides to clear the local stats
-        GM_setValue("wordleStats", stats);
         let v = JSON.parse(stats);
         console.log({"foundstats": v});
+        // backup in case NYTimes ever decides to clear the local stats
+        {
+            const fmtDate = d => d.toISOString().slice(0, 10);
+            // Array of stats as of last 5 days, to ensure it is retreivable
+            let stored_stats = GM_getValue("wordleStats", {});
+            stored_stats[fmtDate(new Date())] = v;
+            if (Object.keys(stored_stats).length > 5) {
+                let oldest = Object.keys(stored_stats).reduce((minKey, currentKey) => currentKey < minKey ? currentKey : minKey);
+                delete stored_stats[oldest];
+            }
+            GM_setValue("wordleStats", stored_stats);
+        }
         numgames.children[1].innerText = v.gamesPlayed;
         winpercent.children[1].innerText = (100 * v.gamesWon / v.gamesPlayed).toPrecision(2);
         currentStreak.children[1].innerText = v.currentStreak;
