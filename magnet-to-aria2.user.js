@@ -2,12 +2,10 @@
 // @name         Real-Debrid Magnet Download to Aria2
 // @namespace    iamkroot
 // @version      2025-09-07
-// @description  Converts magnet links to Real Debrid links, unrestricts them, and sends the download links to aria2
+// @description  Converts magnet links to Real Debrid links, unrestricts them, and sends the download links to aria2. Based on the version 0.6 from https://greasyfork.org/en/scripts/491878-realdebrid-magnet-to-download/discussions/260242
 // @author       DDDemrahc, Alistair1231, iamkroot
-// @license MIT
-// @match        *://1337x.to/*
-// @match        *://www.avsforum.com/*
-// @match        *://real-debrid.com/*
+// @license      MIT
+// @match        *://*/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
@@ -238,43 +236,43 @@
             const unrestrictedFiles = [];
             console.log('Unrestricting links...');
             for (const file of initialFiles) {
-                const unrestrictResponse = await apiRequest({
-                    method: 'POST',
-                    url: `${BASE_URL}unrestrict/link`,
-                    data: `link=${encodeURIComponent(file.link)}`,
-                    headers: {
-                        Authorization: `Bearer ${apiKey}`,
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                });
-                unrestrictedFiles.push({
-                    filePath: file.path,
-                    unrestrictedLink: unrestrictResponse.download
-                });
+                try {
+                    const unrestrictResponse = await apiRequest({
+                        method: 'POST',
+                        url: `${BASE_URL}unrestrict/link`,
+                        data: `link=${encodeURIComponent(file.link)}`,
+                        headers: {
+                            Authorization: `Bearer ${apiKey}`,
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                    });
+                    unrestrictedFiles.push({
+                        filePath: file.path,
+                        unrestrictedLink: unrestrictResponse.download
+                    });
+                } catch (error) {
+                    console.error('An error occurred when unrestricting', file, error);
+                }
             }
-            console.log('All links have been unrestricted.');
+            console.log(`${unrestrictedFiles.length} of ${initialFiles.length} links have been unrestricted.`);
 
             // 5. Send to Aria2 and Copy to the Clipboard
             if (unrestrictedFiles.length > 0) {
                 // Send files with their path info to Aria2
                 const aria2SuccessCount = await sendToAria2(unrestrictedFiles, torrentName);
-                let alertMessage = '';
-
                 if (aria2SuccessCount > 0) {
-                    alertMessage += `${aria2SuccessCount} of ${unrestrictedFiles.length} links were sent to Aria2.\n`;
-                }
-
-                // Always copy to clipboard as a fallback/primary action
-                const linksOnly = unrestrictedFiles.map(file => file.unrestrictedLink);
-                const linksText = linksOnly.join('\n');
-                if (typeof GM.setClipboard === 'function') {
-                    await GM.setClipboard(linksText);
+                    alert(`${aria2SuccessCount} of ${unrestrictedFiles.length} links were sent to Aria2.\n`);
                 } else {
-                    GM_setClipboard(linksText);
+                    // Copy to clipboard as a fallback
+                    const linksOnly = unrestrictedFiles.map(file => file.unrestrictedLink);
+                    const linksText = linksOnly.join('\n');
+                    if (typeof GM.setClipboard === 'function') {
+                        await GM.setClipboard(linksText);
+                    } else {
+                        GM_setClipboard(linksText);
+                    }
+                    alert(`${unrestrictedFiles.length} links have been copied to your clipboard.`);
                 }
-                alertMessage += `Links have been copied to your clipboard.`;
-                alert(alertMessage);
-
             } else {
                 alert('Could not unrestrict any download links.');
             }
