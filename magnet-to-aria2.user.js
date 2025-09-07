@@ -39,6 +39,9 @@
         }
         return secret;
     })();
+    // Your base download directory for Aria2. The torrent's folder name will be created inside this directory.
+    const ARIA2_BASE_DOWNLOAD_DIR = 'Downloads';
+
 
     // --- Helper Function for API Requests ---
 
@@ -75,21 +78,43 @@
 
 
     /**
-     * Sends download links to the Aria2 JSON-RPC endpoint.
-     * @param {string[]} links - An array of download URLs.
+     * Sends download links to the Aria2 JSON-RPC endpoint, preserving directory structure.
+     * @param {{filePath: string, unrestrictedLink: string}[]} filesWithPaths - An array of objects containing the file path and the final download URL.
+     * @param {string} torrentName - The original name of the torrent.
      * @returns {Promise<number>} A promise that resolves with the number of successfully sent links.
      */
-    async function sendToAria2(links) {
+    async function sendToAria2(filesWithPaths, torrentName) {
         if (!ARIA2_RPC_URL) {
             console.log('Aria2 RPC URL is not configured. Skipping.');
             return 0;
         }
 
-        console.log(`Sending ${links.length} links to Aria2 at ${ARIA2_RPC_URL}`);
+        console.log(`Sending ${filesWithPaths.length} files to Aria2 at ${ARIA2_RPC_URL}`);
+
+        // Sanitize torrent name to remove characters that are invalid in folder names
+        const sanitizedTorrentName = torrentName.replace(/[\\/:*?"<>|]/g, '_').trim();
+        const torrentDownloadDir = `${ARIA2_BASE_DOWNLOAD_DIR}/${sanitizedTorrentName}`;
         let successCount = 0;
 
-        for (const link of links) {
-            const params = [[link], {}];
+        for (const file of filesWithPaths) {
+            // The API provides paths starting with '/', like '/Movie.mkv' or '/Folder/Movie.mkv'
+            // We remove the leading slash to correctly join path segments later.
+            const relativePath = file.filePath.startsWith('/') ? file.filePath.substring(1) : file.filePath;
+
+            const lastSlashIndex = relativePath.lastIndexOf('/');
+            const filename = lastSlashIndex === -1 ? relativePath : relativePath.substring(lastSlashIndex + 1);
+            const subdirectory = lastSlashIndex === -1 ? '' : relativePath.substring(0, lastSlashIndex);
+
+            // Construct the final download directory path, including the torrent's main folder
+            const downloadDir = subdirectory ? `${torrentDownloadDir}/${subdirectory}` : torrentDownloadDir;
+
+            const options = {
+                dir: downloadDir,
+                out: filename,
+            };
+
+            const params = [[file.unrestrictedLink], options];
+
             // Prepend the secret token to params if it exists
             if (ARIA2_RPC_SECRET) {
                 params.unshift(`token:${ARIA2_RPC_SECRET}`);
@@ -109,23 +134,25 @@
                     data: JSON.stringify(payload),
                     headers: { 'Content-Type': 'application/json' },
                 });
-                console.log(`Successfully sent link to Aria2: ${link}`);
+                console.log(`Successfully sent file to Aria2: ${filename} to ${downloadDir}`);
                 successCount++;
             } catch (error) {
-                console.error(`Failed to send link to Aria2: ${link}`, error);
+                console.error(`Failed to send link to Aria2: ${file.unrestrictedLink}`, error);
                 // Optionally alert the user on the first failure
-                if (successCount === 0 && links.indexOf(link) === 0) {
+                if (successCount === 0 && filesWithPaths.indexOf(file) === 0) {
                      alert(`Failed to connect to Aria2 at ${ARIA2_RPC_URL}. Check the console and script settings.`);
                 }
             }
         }
         return successCount;
     }
+
+
     // --- Main Application Logic ---
 
     // Get API key from storage. Use `let` because it might be updated.
     // We use the modern GM.* API which is promise-based.
-    let apiKey = await GM.getValue('API_KEY', '');
+    let apiKey = await (typeof GM.getValue === 'function' ? GM.getValue('API_KEY', '') : GM_getValue('API_KEY', ''));
 
     // If API key is not set, prompt the user for it under specific conditions.
     if (!apiKey) {
@@ -133,7 +160,11 @@
         if (window.location.hostname.includes('real-debrid.com') && !window.location.href.includes('real-debrid.com/apitoken')) {
             const newApiKey = prompt('Please enter your Real Debrid API Key from https://real-debrid.com/apitoken:', '');
             if (newApiKey) {
-                await GM.setValue('API_KEY', newApiKey);
+                if (typeof GM.setValue === 'function') {
+                    await GM.setValue('API_KEY', newApiKey);
+                } else {
+                    GM_setValue('API_KEY', newApiKey);
+                }
                 apiKey = newApiKey;
             }
         }
@@ -185,41 +216,65 @@
                 url: `${BASE_URL}torrents/info/${torrentId}`,
                 headers: { Authorization: `Bearer ${apiKey}` },
             });
+            const torrentName = torrentInfo.filename; // Get the torrent name for the folder
 
-            const initialLinks = torrentInfo.links;
-            if (!initialLinks || initialLinks.length === 0) {
+            // Create a mapping of selected file paths to the initial (restricted) links.
+            // This is crucial for preserving the directory structure.
+            const initialFiles = torrentInfo.files
+                .filter(file => file.selected === 1) // Ensure we only process files that were actually selected.
+                .map((file, index) => ({
+                    path: file.path,
+                    link: torrentInfo.links[index] // The 'links' array corresponds to the selected files.
+                }));
+
+            if (!initialFiles || initialFiles.length === 0) {
                 alert('No download links were found for this torrent.');
                 console.warn('No links found in torrent info response.');
                 return;
             }
-            console.log(`Found ${initialLinks.length} file links to process.`);
+            console.log(`Found ${initialFiles.length} file links to process.`);
 
             // 4. Unrestrict Each Link
-            const unrestrictedLinks = [];
+            const unrestrictedFiles = [];
             console.log('Unrestricting links...');
-            for (const link of initialLinks) {
+            for (const file of initialFiles) {
                 const unrestrictResponse = await apiRequest({
                     method: 'POST',
                     url: `${BASE_URL}unrestrict/link`,
-                    data: `link=${encodeURIComponent(link)}`,
+                    data: `link=${encodeURIComponent(file.link)}`,
                     headers: {
                         Authorization: `Bearer ${apiKey}`,
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
                 });
-                unrestrictedLinks.push(unrestrictResponse.download);
+                unrestrictedFiles.push({
+                    filePath: file.path,
+                    unrestrictedLink: unrestrictResponse.download
+                });
             }
             console.log('All links have been unrestricted.');
-            // if (unrestrictedLinks.length > 0)
-            // }
-            // 5. Copy the Final Links to the Clipboard
-            if (unrestrictedLinks.length > 0) {
-                const aria2SuccessCount = await sendToAria2(unrestrictedLinks);
-                let alertMessage = `${aria2SuccessCount} of ${unrestrictedLinks.length} links were sent to Aria2.\n`;
+
+            // 5. Send to Aria2 and Copy to the Clipboard
+            if (unrestrictedFiles.length > 0) {
+                // Send files with their path info to Aria2
+                const aria2SuccessCount = await sendToAria2(unrestrictedFiles, torrentName);
+                let alertMessage = '';
+
+                if (aria2SuccessCount > 0) {
+                    alertMessage += `${aria2SuccessCount} of ${unrestrictedFiles.length} links were sent to Aria2.\n`;
+                }
+
+                // Always copy to clipboard as a fallback/primary action
+                const linksOnly = unrestrictedFiles.map(file => file.unrestrictedLink);
+                const linksText = linksOnly.join('\n');
+                if (typeof GM.setClipboard === 'function') {
+                    await GM.setClipboard(linksText);
+                } else {
+                    GM_setClipboard(linksText);
+                }
+                alertMessage += `Links have been copied to your clipboard.`;
                 alert(alertMessage);
-                const linksText = unrestrictedLinks.join('\n');
-                await GM.setClipboard(linksText);
-                // alert(`${unrestrictedLinks.length} unrestricted download links copied to clipboard!`);
+
             } else {
                 alert('Could not unrestrict any download links.');
             }
