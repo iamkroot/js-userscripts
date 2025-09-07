@@ -1,13 +1,13 @@
 // ==UserScript==
-// @name         Async Real-Debrid Magnet Converter
+// @name         Real-Debrid Magnet Download to Aria2
 // @namespace    iamkroot
-// @version      2025-09-07:1
-// @description  IConverts magnet links to Real Debrid links, unrestricts them, and copies the download link to the clipboard
+// @version      2025-09-07
+// @description  Converts magnet links to Real Debrid links, unrestricts them, and sends the download links to aria2
 // @author       DDDemrahc, Alistair1231, iamkroot
 // @license MIT
 // @match        *://1337x.to/*
-// @match        *://real-debrid.com/*
 // @match        *://www.avsforum.com/*
+// @match        *://real-debrid.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
@@ -22,6 +22,23 @@
 
     // --- Configuration ---
     const BASE_URL = 'https://api.real-debrid.com/rest/1.0/';
+    // --- Aria2 JSON-RPC Configuration ---
+    // The full URL to your Aria2 JSON-RPC endpoint.
+    // Default is 'http://localhost:6800/jsonrpc'.
+    const ARIA2_RPC_URL = 'http://localhost:6800/jsonrpc';
+    // Your Aria2 RPC secret token. Leave empty if you don't have one.
+    const ARIA2_RPC_SECRET = await (async () => {
+        let secret = await GM.getValue('ARIA2_RPC_SECRET', '');
+        if (!secret) {
+            const newsecret = prompt('Please enter your ARIA2_RPC_SECRET:', '');
+            if (newsecret) {
+                await GM.setValue('ARIA2_RPC_SECRET', newsecret);
+                secret = newsecret;
+
+            }
+        }
+        return secret;
+    })();
 
     // --- Helper Function for API Requests ---
 
@@ -57,6 +74,53 @@
     }
 
 
+    /**
+     * Sends download links to the Aria2 JSON-RPC endpoint.
+     * @param {string[]} links - An array of download URLs.
+     * @returns {Promise<number>} A promise that resolves with the number of successfully sent links.
+     */
+    async function sendToAria2(links) {
+        if (!ARIA2_RPC_URL) {
+            console.log('Aria2 RPC URL is not configured. Skipping.');
+            return 0;
+        }
+
+        console.log(`Sending ${links.length} links to Aria2 at ${ARIA2_RPC_URL}`);
+        let successCount = 0;
+
+        for (const link of links) {
+            const params = [[link], {}];
+            // Prepend the secret token to params if it exists
+            if (ARIA2_RPC_SECRET) {
+                params.unshift(`token:${ARIA2_RPC_SECRET}`);
+            }
+
+            const payload = {
+                jsonrpc: '2.0',
+                id: `rd-script-${Date.now()}-${Math.random()}`,
+                method: 'aria2.addUri',
+                params: params,
+            };
+
+            try {
+                await apiRequest({
+                    method: 'POST',
+                    url: ARIA2_RPC_URL,
+                    data: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                console.log(`Successfully sent link to Aria2: ${link}`);
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to send link to Aria2: ${link}`, error);
+                // Optionally alert the user on the first failure
+                if (successCount === 0 && links.indexOf(link) === 0) {
+                     alert(`Failed to connect to Aria2 at ${ARIA2_RPC_URL}. Check the console and script settings.`);
+                }
+            }
+        }
+        return successCount;
+    }
     // --- Main Application Logic ---
 
     // Get API key from storage. Use `let` because it might be updated.
@@ -146,12 +210,16 @@
                 unrestrictedLinks.push(unrestrictResponse.download);
             }
             console.log('All links have been unrestricted.');
-
+            // if (unrestrictedLinks.length > 0)
+            // }
             // 5. Copy the Final Links to the Clipboard
             if (unrestrictedLinks.length > 0) {
+                const aria2SuccessCount = await sendToAria2(unrestrictedLinks);
+                let alertMessage = `${aria2SuccessCount} of ${unrestrictedLinks.length} links were sent to Aria2.\n`;
+                alert(alertMessage);
                 const linksText = unrestrictedLinks.join('\n');
                 await GM.setClipboard(linksText);
-                alert(`${unrestrictedLinks.length} unrestricted download links copied to clipboard!`);
+                // alert(`${unrestrictedLinks.length} unrestricted download links copied to clipboard!`);
             } else {
                 alert('Could not unrestrict any download links.');
             }
