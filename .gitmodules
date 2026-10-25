@@ -1,0 +1,4 @@
+[submodule "tm-bridge"]
+	path = tm-bridge
+	url = git@github.com:iamkroot/tm-bridge.git
+	branch = main
